@@ -69,6 +69,8 @@ export interface Config {
   collections: {
     users: User;
     media: Media;
+    pages: Page;
+    templates: Template;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -77,6 +79,8 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    pages: PagesSelect<false> | PagesSelect<true>;
+    templates: TemplatesSelect<false> | TemplatesSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -158,6 +162,179 @@ export interface Media {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pages".
+ */
+export interface Page {
+  id: number;
+  title: string;
+  slug: string;
+  template?: (number | null) | Template;
+  sections?:
+    | (
+        | {
+            heading: string;
+            subheading?: string | null;
+            image?: (number | null) | Media;
+            ctaText?: string | null;
+            ctaHref?: string | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'hero';
+          }
+        | {
+            items?:
+              | {
+                  title: string;
+                  description?: string | null;
+                  icon?: string | null;
+                  id?: string | null;
+                }[]
+              | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'features';
+          }
+        | {
+            plans?:
+              | {
+                  name: string;
+                  price: string;
+                  features?:
+                    | {
+                        item?: string | null;
+                        id?: string | null;
+                      }[]
+                    | null;
+                  ctaText?: string | null;
+                  ctaHref?: string | null;
+                  id?: string | null;
+                }[]
+              | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'pricing';
+          }
+        | {
+            items?:
+              | {
+                  question: string;
+                  answer: string;
+                  id?: string | null;
+                }[]
+              | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'faq';
+          }
+        | {
+            text: string;
+            href: string;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'cta';
+          }
+      )[]
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "templates".
+ */
+export interface Template {
+  id: number;
+  key: string;
+  name: string;
+  summary?: string | null;
+  previewImage?: (number | null) | Media;
+  demoUrl?: string | null;
+  repoUrl?: string | null;
+  branch?: string | null;
+  packageManager?: ('npm' | 'pnpm' | 'yarn') | null;
+  buildCommand?: string | null;
+  devCommand?: string | null;
+  outputDir?: string | null;
+  variables?:
+    | {
+        key: string;
+        label: string;
+        defaultValue?: string | null;
+        description?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  defaultSections?:
+    | (
+        | {
+            heading: string;
+            subheading?: string | null;
+            image?: (number | null) | Media;
+            ctaText?: string | null;
+            ctaHref?: string | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'hero';
+          }
+        | {
+            items?:
+              | {
+                  title: string;
+                  description?: string | null;
+                  icon?: string | null;
+                  id?: string | null;
+                }[]
+              | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'features';
+          }
+        | {
+            plans?:
+              | {
+                  name: string;
+                  price: string;
+                  features?:
+                    | {
+                        item?: string | null;
+                        id?: string | null;
+                      }[]
+                    | null;
+                  ctaText?: string | null;
+                  ctaHref?: string | null;
+                  id?: string | null;
+                }[]
+              | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'pricing';
+          }
+        | {
+            items?:
+              | {
+                  question: string;
+                  answer: string;
+                  id?: string | null;
+                }[]
+              | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'faq';
+          }
+        | {
+            text: string;
+            href: string;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'cta';
+          }
+      )[]
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
 export interface PayloadLockedDocument {
@@ -170,6 +347,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'media';
         value: number | Media;
+      } | null)
+    | ({
+        relationTo: 'pages';
+        value: number | Page;
+      } | null)
+    | ({
+        relationTo: 'templates';
+        value: number | Template;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -252,6 +437,187 @@ export interface MediaSelect<T extends boolean = true> {
   height?: T;
   focalX?: T;
   focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pages_select".
+ */
+export interface PagesSelect<T extends boolean = true> {
+  title?: T;
+  slug?: T;
+  template?: T;
+  sections?:
+    | T
+    | {
+        hero?:
+          | T
+          | {
+              heading?: T;
+              subheading?: T;
+              image?: T;
+              ctaText?: T;
+              ctaHref?: T;
+              id?: T;
+              blockName?: T;
+            };
+        features?:
+          | T
+          | {
+              items?:
+                | T
+                | {
+                    title?: T;
+                    description?: T;
+                    icon?: T;
+                    id?: T;
+                  };
+              id?: T;
+              blockName?: T;
+            };
+        pricing?:
+          | T
+          | {
+              plans?:
+                | T
+                | {
+                    name?: T;
+                    price?: T;
+                    features?:
+                      | T
+                      | {
+                          item?: T;
+                          id?: T;
+                        };
+                    ctaText?: T;
+                    ctaHref?: T;
+                    id?: T;
+                  };
+              id?: T;
+              blockName?: T;
+            };
+        faq?:
+          | T
+          | {
+              items?:
+                | T
+                | {
+                    question?: T;
+                    answer?: T;
+                    id?: T;
+                  };
+              id?: T;
+              blockName?: T;
+            };
+        cta?:
+          | T
+          | {
+              text?: T;
+              href?: T;
+              id?: T;
+              blockName?: T;
+            };
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "templates_select".
+ */
+export interface TemplatesSelect<T extends boolean = true> {
+  key?: T;
+  name?: T;
+  summary?: T;
+  previewImage?: T;
+  demoUrl?: T;
+  repoUrl?: T;
+  branch?: T;
+  packageManager?: T;
+  buildCommand?: T;
+  devCommand?: T;
+  outputDir?: T;
+  variables?:
+    | T
+    | {
+        key?: T;
+        label?: T;
+        defaultValue?: T;
+        description?: T;
+        id?: T;
+      };
+  defaultSections?:
+    | T
+    | {
+        hero?:
+          | T
+          | {
+              heading?: T;
+              subheading?: T;
+              image?: T;
+              ctaText?: T;
+              ctaHref?: T;
+              id?: T;
+              blockName?: T;
+            };
+        features?:
+          | T
+          | {
+              items?:
+                | T
+                | {
+                    title?: T;
+                    description?: T;
+                    icon?: T;
+                    id?: T;
+                  };
+              id?: T;
+              blockName?: T;
+            };
+        pricing?:
+          | T
+          | {
+              plans?:
+                | T
+                | {
+                    name?: T;
+                    price?: T;
+                    features?:
+                      | T
+                      | {
+                          item?: T;
+                          id?: T;
+                        };
+                    ctaText?: T;
+                    ctaHref?: T;
+                    id?: T;
+                  };
+              id?: T;
+              blockName?: T;
+            };
+        faq?:
+          | T
+          | {
+              items?:
+                | T
+                | {
+                    question?: T;
+                    answer?: T;
+                    id?: T;
+                  };
+              id?: T;
+              blockName?: T;
+            };
+        cta?:
+          | T
+          | {
+              text?: T;
+              href?: T;
+              id?: T;
+              blockName?: T;
+            };
+      };
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

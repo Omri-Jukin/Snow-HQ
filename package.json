@@ -13,11 +13,19 @@
     "lint": "cross-env NODE_OPTIONS=--no-deprecation next lint",
     "payload": "cross-env NODE_OPTIONS=--no-deprecation payload",
     "start": "cross-env NODE_OPTIONS=--no-deprecation next start",
+    "dev:studio": "npm run dev --prefix apps/studio",
+    "build:studio": "npm run build --prefix apps/studio",
+    "start:studio": "npm run start --prefix apps/studio",
     "test": "pnpm run test:int && pnpm run test:e2e",
     "test:e2e": "cross-env NODE_OPTIONS=\"--no-deprecation --no-experimental-strip-types\" pnpm exec playwright test",
     "test:int": "cross-env NODE_OPTIONS=--no-deprecation vitest run --config ./vitest.config.mts"
   },
   "dependencies": {
+    "@react-pdf/renderer": "^4.2.2",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^7.3.1",
+    "@mui/styled-engine-sc": "^7.3.1",
     "@payloadcms/db-postgres": "3.50.0",
     "@payloadcms/next": "3.50.0",
     "@payloadcms/payload-cloud": "3.50.0",
@@ -34,7 +42,11 @@
     "pg": "^8.16.3",
     "react": "19.1.0",
     "react-dom": "^19.1.0",
-    "sharp": "0.34.2"
+    "sharp": "0.34.2",
+    "mammoth": "^1.8.0",
+    "pdf-parse": "^1.1.1",
+    "styled-components": "^6.1.19",
+    "zod": "^4.0.15"
   },
   "devDependencies": {
     "@playwright/test": "1.54.1",

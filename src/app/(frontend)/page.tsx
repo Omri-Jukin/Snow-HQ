@@ -1,10 +1,13 @@
 import { headers as getHeaders } from 'next/headers.js'
-import Image from 'next/image'
 import { getPayload } from 'payload'
 import React from 'react'
 import { fileURLToPath } from 'url'
+import Container from '@mui/material/Container'
+import Typography from '@mui/material/Typography'
+import Link from 'next/link'
 
 import config from '@/payload.config'
+import ResumeGenerator from '@/Components/ResumeGenerator'
 import './styles.css'
 
 export default async function HomePage() {
@@ -14,46 +17,38 @@ export default async function HomePage() {
   const { user } = await payload.auth({ headers })
 
   const fileURL = `vscode://file/${fileURLToPath(import.meta.url)}`
+  const studioUrl = process.env.DEV_NEXT_PUBLIC_STUDIO_URL || '/studio'
 
   return (
-    <div className="home">
-      <div className="content">
-        <picture>
-          <source srcSet="https://raw.githubusercontent.com/payloadcms/payload/main/packages/ui/src/assets/payload-favicon.svg" />
-          <Image
-            alt="Payload Logo"
-            height={65}
-            src="https://raw.githubusercontent.com/payloadcms/payload/main/packages/ui/src/assets/payload-favicon.svg"
-            width={65}
-          />
-        </picture>
-        {!user && <h1>Welcome to your new project.</h1>}
-        {user && <h1>Welcome back, {user.email}</h1>}
-        <div className="links">
-          <a
-            className="admin"
-            href={payloadConfig.routes.admin}
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            Go to admin panel
-          </a>
-          <a
-            className="docs"
-            href="https://payloadcms.com/docs"
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            Documentation
-          </a>
-        </div>
-      </div>
-      <div className="footer">
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Typography variant="h4" sx={{ mb: 2 }}>
+        {user ? `Welcome back, ${user.email}` : 'Welcome to Snow HQ'}
+      </Typography>
+      <Typography sx={{ mb: 2 }}>
+        <Link className="admin" href={payloadConfig.routes.admin} target="_blank">
+          Go to admin panel
+        </Link>
+        {' · '}
+        <Link className="admin" href={studioUrl} target="_blank">
+          Go to Studio
+        </Link>
+        {' · '}
+        <a
+          className="docs"
+          href="https://payloadcms.com/docs"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Documentation
+        </a>
+      </Typography>
+      <ResumeGenerator />
+      <div className="footer" style={{ marginTop: 24 }}>
         <p>Update this page by editing</p>
         <a className="codeLink" href={fileURL}>
           <code>app/(frontend)/page.tsx</code>
         </a>
       </div>
-    </div>
+    </Container>
   )
 }
