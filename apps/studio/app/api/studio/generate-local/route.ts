@@ -97,10 +97,10 @@ const BodySchema = z.object({
 
 /** ---------- Output Schema ---------- */
 const OutputSchema = z.object({
-  enhanced_resume: z.string().min(50),
-  cover_letter: z.string().min(50),
-  portfolio: z.string().min(20),
-  personal_note: z.string().min(5),
+  enhanced_resume: z.string().min(1),
+  cover_letter: z.string().min(1),
+  portfolio: z.string().min(1),
+  personal_note: z.string().min(1),
 })
 
 /** ---------- Utils ---------- */
@@ -419,7 +419,7 @@ export async function POST(req: Request) {
     const opts = options as Options | undefined
     const systemPrompt = buildSystemPrompt(opts, cvText, jdText)
     const userPrompt =
-      'Return ONLY the JSON object with "enhanced_resume", "cover_letter", "portfolio", "personal_note". No preamble.'
+      'Return ONLY the JSON object with "enhanced_resume", "cover_letter", "portfolio", "personal_note". No preamble. Do not use ellipses or placeholders. Never truncate with ... or … — produce complete text for every field.'
 
     async function callOnce(temp: number) {
       const payload: Record<string, unknown> = {
@@ -430,10 +430,26 @@ export async function POST(req: Request) {
         ],
         temperature: temp, // keep low for factuality; humanization handled in prompt
         top_p: 0.9,
-        max_tokens: 2400,
+        max_tokens: 3000,
       }
       // Always request strict JSON output
-      payload.response_format = { type: 'json_object' }
+      payload.response_format = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'Artifacts',
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['enhanced_resume', 'cover_letter', 'portfolio', 'personal_note'],
+            properties: {
+              enhanced_resume: { type: 'string' },
+              cover_letter: { type: 'string' },
+              portfolio: { type: 'string' },
+              personal_note: { type: 'string' },
+            },
+          },
+        },
+      }
 
       const res = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
@@ -455,33 +471,92 @@ export async function POST(req: Request) {
 
     // Simple retry strategy with slightly different temperature
     const first = await callOnce(0.3)
-    let text: string | undefined
-    let usage: unknown
-    if (!first.ok || !first.text) {
-      const second = await callOnce(0.2)
-      if (!second.ok || !second.text) {
-        return Response.json(
-          { error: 'Model call failed', detail: first.ok ? first : second },
-          { status: 502 },
-        )
-      }
-      text = second.text
-      usage = second.usage
-    } else {
-      text = first.text
-      usage = first.usage
+    const initialText = first.ok && first.text ? first.text : (await callOnce(0.2)).text
+    if (!initialText) {
+      return Response.json({ error: 'Model call failed', detail: first }, { status: 502 })
     }
 
-    const parsedJson = tryParseJson(text)
-    const validated = OutputSchema.safeParse(parsedJson)
+    const parsedJson = tryParseJson(initialText)
+    const thresholds = { resume: 600, cover: 300, portfolio: 250, note: 60 }
+    const hasEllipsis = (s: string) => /\.\.\.|…/.test(s)
+    const obj = (parsedJson || {}) as Record<string, unknown>
+    const need = [
+      ['enhanced_resume', thresholds.resume],
+      ['cover_letter', thresholds.cover],
+      ['portfolio', thresholds.portfolio],
+      ['personal_note', thresholds.note],
+    ] as const
+    const incomplete = need
+      .filter(
+        ([k, min]) =>
+          typeof obj[k] !== 'string' ||
+          (obj[k] as string).length < min ||
+          hasEllipsis(String(obj[k] || '')),
+      )
+      .map(([k]) => k as string)
+
+    let improved = parsedJson
+    if (incomplete.length) {
+      const improveMsg = `Your previous JSON had these incomplete fields: ${incomplete.join(
+        ', ',
+      )}. Expand each fully. No ellipses or placeholders. Return JSON only.`
+      const payload: Record<string, unknown> = {
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+          { role: 'assistant', content: typeof initialText === 'string' ? initialText : '' },
+          { role: 'user', content: improveMsg },
+        ],
+        temperature: 0.25,
+        top_p: 0.9,
+        max_tokens: 3200,
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'Artifacts',
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['enhanced_resume', 'cover_letter', 'portfolio', 'personal_note'],
+              properties: {
+                enhanced_resume: { type: 'string' },
+                cover_letter: { type: 'string' },
+                portfolio: { type: 'string' },
+                personal_note: { type: 'string' },
+              },
+            },
+          },
+        },
+      }
+      const res2 = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(payload),
+      })
+      if (res2.ok) {
+        const data2 = await res2.json()
+        const text2 = data2?.choices?.[0]?.message?.content as string | undefined
+        if (text2) improved = tryParseJson(text2)
+      }
+    }
+
+    const validated = OutputSchema.safeParse(improved)
     if (!validated.success) {
       return Response.json(
-        { error: 'Invalid model JSON shape', raw: text, issues: validated.error.flatten() },
+        {
+          error: 'Invalid model JSON shape',
+          raw: typeof improved === 'string' ? improved : initialText,
+          issues: validated.error.flatten(),
+        },
         { status: 502 },
       )
     }
 
-    return Response.json({ artifacts: validated.data, usage })
+    return Response.json({ artifacts: validated.data })
   } catch (err) {
     console.error(err)
     return Response.json({ error: 'Unexpected error' }, { status: 500 })

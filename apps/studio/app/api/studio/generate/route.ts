@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     })
 
     // Vercel AI SDK could be used here; to minimize deps for MVP, we call OpenAI-compatible APIs when provider=openai
-    let responseJson: any
+    let responseJson: { type: string; content: string } | { raw: string }
     if (provider === 'openai') {
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -50,7 +50,23 @@ export async function POST(req: Request) {
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
           ],
-          response_format: { type: 'json_object' },
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'Artifacts',
+              schema: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['resume', 'cover_letter', 'personal_note', 'portfolio'],
+                properties: {
+                  // Keeping keys aligned with current minimal endpoint contract
+                  resume: { type: 'object', additionalProperties: true },
+                  cover_letter: { type: 'string' },
+                  personal_note: { type: 'string' },
+                },
+              },
+            },
+          },
           temperature: 0.4,
         }),
       })
