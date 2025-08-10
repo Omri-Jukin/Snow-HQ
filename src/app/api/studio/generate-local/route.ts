@@ -122,6 +122,8 @@ You are an expert job application writer and resume editor.
 
 ALWAYS write in clear first-person voice across ALL artifacts.
 
+Format for ALL artifacts is Markdown. Use clear headings (e.g., #, ##), bullet lists for responsibilities/achievements/skills, and short paragraphs. Do NOT use tables, images, or multi-column layouts.
+
 Produce four fields: enhanced_resume, cover_letter (${coverLen - 30}-${coverLen + 30} words), portfolio (${portfolioFormat}, sections: ${portfolioSections}), personal_note (${noteSentences} sentence(s)).
 
 ${targetRole ? `Target role: ${targetRole}.` : ''}
@@ -207,7 +209,40 @@ export async function POST(req: Request) {
     const model = process.env.OPENAI_MODEL || 'openai/gpt-oss-20b'
 
     const { cvText, jdText, options } = parsed.data
-    const systemPrompt = buildSystemPrompt(options, cvText, jdText)
+
+    // Conservatively clip long inputs to avoid context overflow on local models
+    function estimateTokensByChars(text: string): number {
+      return Math.ceil(text.length / 4)
+    }
+    function clipByChars(text: string, maxChars: number): string {
+      if (text.length <= maxChars) return text
+      const head = Math.floor(maxChars * 0.7)
+      const tail = maxChars - head
+      return text.slice(0, head) + '\n...\n' + text.slice(-tail)
+    }
+    const CTX_LIMIT = Number(process.env.GEN_CONTEXT_TOKENS || 4096)
+    const MAX_OUT_TOKENS = Number(process.env.GEN_MAX_OUTPUT_TOKENS || 900)
+    const INPUT_TOKEN_BUDGET = Number(process.env.GEN_MAX_INPUT_TOKENS || 2400)
+    const totalTokens = estimateTokensByChars(cvText) + estimateTokensByChars(jdText)
+    let cvForPrompt = cvText
+    let jdForPrompt = jdText
+    if (totalTokens > INPUT_TOKEN_BUDGET) {
+      const ratio = estimateTokensByChars(cvText) / totalTokens
+      const cvMax = Math.max(800, Math.floor(INPUT_TOKEN_BUDGET * ratio * 4 * 0.9))
+      const jdMax = Math.max(800, Math.floor(INPUT_TOKEN_BUDGET * (1 - ratio) * 4 * 0.9))
+      cvForPrompt = clipByChars(cvText, cvMax)
+      jdForPrompt = clipByChars(jdText, jdMax)
+    }
+
+    const systemPrompt = buildSystemPrompt(options, cvForPrompt, jdForPrompt)
+
+    function calcMaxTokens(additionalPrompt: string): number {
+      const basePromptTokens = estimateTokensByChars(systemPrompt)
+      const extraTokens = estimateTokensByChars(additionalPrompt)
+      const safety = 128
+      const remain = CTX_LIMIT - (basePromptTokens + extraTokens) - safety
+      return Math.max(256, Math.min(MAX_OUT_TOKENS, remain))
+    }
 
     const hasEllipsis = (s: string) => /\.\.\.|…/.test(s)
 
@@ -235,75 +270,210 @@ export async function POST(req: Request) {
       return data?.choices?.[0]?.message?.content as string | undefined
     }
 
+    async function callJsonObject(
+      messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+      maxTokens = 4000,
+      temp = 0.25,
+    ) {
+      const payload = {
+        model,
+        messages,
+        temperature: temp,
+        top_p: 0.9,
+        max_tokens: maxTokens,
+        response_format: { type: 'json_object' as const },
+      }
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) return null
+      const data = await res.json()
+      return data?.choices?.[0]?.message?.content as string | undefined
+    }
+
+    async function callText(
+      messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+      maxTokens = 4000,
+      temp = 0.2,
+    ) {
+      const payload = { model, messages, temperature: temp, top_p: 0.9, max_tokens: maxTokens }
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) return null
+      const data = await res.json()
+      return data?.choices?.[0]?.message?.content as string | undefined
+    }
+
+    async function trySingleShot(): Promise<null | {
+      enhanced_resume: string
+      cover_letter: string
+      portfolio: string
+      personal_note: string
+    }> {
+      // Prefer json_object for wider compatibility with local servers
+      const first = await callJsonObject(
+        [
+          { role: 'system', content: systemPrompt },
+          {
+            role: 'user',
+            content:
+              'Return ONLY a JSON object with the keys: enhanced_resume, cover_letter, portfolio, personal_note. No preamble, no code fences, no ellipses.',
+          },
+        ],
+        calcMaxTokens('JSON object: enhanced_resume, cover_letter, portfolio, personal_note'),
+        0.25,
+      )
+      let candidate = first
+      if (!candidate) {
+        // Fallback: no response_format, free-form, but ask for strict JSON
+        candidate = await callText(
+          [
+            { role: 'system', content: systemPrompt },
+            {
+              role: 'user',
+              content:
+                'Return ONLY strict JSON with keys enhanced_resume, cover_letter, portfolio, personal_note. No backticks, no commentary.',
+            },
+          ],
+          calcMaxTokens('strict JSON with keys for four fields'),
+          0.2,
+        )
+      }
+      if (!candidate) return null
+      const parsed = tryParseJson(candidate) as Record<string, unknown>
+      const obj = {
+        enhanced_resume: String(parsed?.enhanced_resume || ''),
+        cover_letter: String(parsed?.cover_letter || ''),
+        portfolio: String(parsed?.portfolio || ''),
+        personal_note: String(parsed?.personal_note || ''),
+      }
+      const ok =
+        obj.enhanced_resume.length > 50 &&
+        obj.cover_letter.length > 50 &&
+        obj.portfolio.length > 30 &&
+        obj.personal_note.length > 10
+      return ok ? obj : null
+    }
+
     async function generateField(
       key: 'enhanced_resume' | 'cover_letter' | 'portfolio' | 'personal_note',
       minChars: number,
       extraRules: string,
     ): Promise<string> {
-      const baseUser = `Return ONLY JSON with key ${key}. No preamble. Hard rules: no ellipses or placeholders, never truncate, minimum ${minChars} characters. ${extraRules}`
       const schema = {
         type: 'object',
         additionalProperties: false,
         required: [key],
         properties: { [key]: { type: 'string', minLength: Math.max(1, Math.min(minChars, 2000)) } },
       }
-      const first = await callJsonSchema(
-        [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: baseUser },
-        ],
-        schema,
-        3400,
-        0.25,
-      )
-      let value = ''
-      if (first) {
-        const parsed = tryParseJson(first) as Record<string, unknown>
-        value = String(parsed?.[key] || '')
-      }
-      if (!value || value.length < minChars || hasEllipsis(value)) {
-        const second = await callJsonSchema(
-          [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: baseUser },
-            { role: 'assistant', content: first || '' },
-            {
-              role: 'user',
-              content: `Expand and complete ${key}. Remove any ellipses. Keep first-person, ATS friendly. Return only JSON with key ${key}.`,
-            },
-          ],
-          schema,
-          3600,
-          0.2,
-        )
-        if (second) {
-          const parsed2 = tryParseJson(second) as Record<string, unknown>
-          value = String(parsed2?.[key] || value)
+      // Reordered attempts to favor simpler formats first and compute dynamic max_tokens
+      const attempts: Array<{
+        min: number
+        prompt: string
+        caller: 'object' | 'text' | 'schema'
+        temp: number
+      }> = [
+        {
+          min: Math.floor(minChars * 0.6),
+          prompt: `Return ONLY a JSON object { "${key}": "..." }. No preamble. No code fences. No ellipses. Minimum ${Math.floor(minChars * 0.6)} characters. ${extraRules}`,
+          caller: 'object',
+          temp: 0.2,
+        },
+        {
+          min: Math.floor(minChars * 0.45),
+          prompt: `Return ONLY strict JSON: { "${key}": "..." }. No backticks. No commentary. Minimum ${Math.floor(minChars * 0.45)} characters. ${extraRules}`,
+          caller: 'text',
+          temp: 0.15,
+        },
+        {
+          min: Math.floor(minChars * 0.8),
+          prompt: `Return ONLY JSON with key ${key}. No preamble. No code fences. No ellipses. Minimum ${Math.floor(minChars * 0.8)} characters. ${extraRules}`,
+          caller: 'schema',
+          temp: 0.2,
+        },
+      ]
+
+      for (const step of attempts) {
+        let raw: string | null | undefined
+        const maxTokens = calcMaxTokens(step.prompt)
+        if (step.caller === 'schema') {
+          raw = await callJsonSchema(
+            [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: step.prompt },
+            ],
+            schema,
+            maxTokens,
+            step.temp,
+          )
+        } else if (step.caller === 'object') {
+          raw = await callJsonObject(
+            [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: step.prompt },
+            ],
+            maxTokens,
+            step.temp,
+          )
+        } else {
+          raw = await callText(
+            [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: step.prompt },
+            ],
+            maxTokens,
+            step.temp,
+          )
         }
+        if (!raw) continue
+        const parsed = tryParseJson(raw) as Record<string, unknown>
+        const value = String(parsed?.[key] || '')
+        if (value && value.length >= step.min && !hasEllipsis(value)) return value
       }
-      return value
+      return ''
     }
 
-    const enhanced_resume = await generateField(
-      'enhanced_resume',
-      2000,
-      'Structure with Summary, Experience, Skills, Education, Projects. Plain text, no tables.',
-    )
-    const cover_letter = await generateField(
-      'cover_letter',
-      800,
-      'Three short paragraphs: intro fit, achievements aligned to JD, close courteously.',
-    )
-    const portfolio = await generateField(
-      'portfolio',
-      700,
-      'Markdown allowed. Include requested sections with concise bullet points.',
-    )
-    const personal_note = await generateField(
-      'personal_note',
-      220,
-      'Two sentences, specific, no fluff.',
-    )
+    // Try a single-shot generation first to reduce token pressure and API calls
+    // Run single-shot only when there is ample context budget
+    let single: null | {
+      enhanced_resume: string
+      cover_letter: string
+      portfolio: string
+      personal_note: string
+    } = null
+    const singleShotBudget = calcMaxTokens('single-shot all fields')
+    if (singleShotBudget >= 700) {
+      single = await trySingleShot()
+    }
+    const enhanced_resume = single
+      ? single.enhanced_resume
+      : await generateField(
+          'enhanced_resume',
+          1400,
+          'Use Markdown. Start with # Resume then ## Summary, ## Experience, ## Skills, ## Education, ## Projects (as applicable). Use bullet lists; no tables or images.',
+        )
+    const cover_letter = single
+      ? single.cover_letter
+      : await generateField(
+          'cover_letter',
+          500,
+          'Use Markdown. Include a title (e.g., # Cover Letter), then concise paragraphs: intro fit, achievements aligned to JD, courteous closing. Use bullets if helpful.',
+        )
+    const portfolio = single
+      ? single.portfolio
+      : await generateField(
+          'portfolio',
+          400,
+          'Use Markdown. Include requested sections (e.g., ## Featured, ## Projects, ## Skills, ## Links) with concise bullet points. Use existing links only.',
+        )
+    const personal_note = single
+      ? single.personal_note
+      : await generateField('personal_note', 80, 'Use Markdown. Two sentences, specific, no fluff.')
 
     const improvedJson = { enhanced_resume, cover_letter, portfolio, personal_note }
     const validated = OutputSchema.safeParse(improvedJson)

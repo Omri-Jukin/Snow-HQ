@@ -43,11 +43,21 @@ async function postGenerate(
   return res.json()
 }
 
-async function postPdf(artifacts: GeneratedArtifacts, templateId: string): Promise<Blob> {
+async function postPdf(
+  artifacts: GeneratedArtifacts,
+  templateId: string,
+  only?: 'enhanced_resume' | 'cover_letter' | 'portfolio' | 'personal_note',
+  renderer?: 'react-pdf' | 'md-to-pdf',
+): Promise<Blob> {
   const res = await fetch('/api/pdf', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ artifacts, templateId }),
+    body: JSON.stringify({
+      artifacts,
+      templateId,
+      ...(only ? { only } : {}),
+      ...(renderer ? { renderer } : {}),
+    }),
   })
   if (!res.ok) throw new Error('Failed to render PDF')
   return await res.blob()
@@ -60,6 +70,7 @@ export default function ResumeGenerator() {
   const [jdFile, setJdFile] = React.useState<File | null>(null)
   const [templateId, setTemplateId] = React.useState(DEFAULT_TEMPLATE_ID)
   const [targetRole, setTargetRole] = React.useState('Software Engineer')
+  const [renderer, setRenderer] = React.useState<'react-pdf' | 'md-to-pdf'>('react-pdf')
   const TONE_OPTIONS = [
     'confident',
     'concise',
@@ -199,13 +210,16 @@ Requirements:
     }
   }
 
-  const handleDownloadPdf = async () => {
+  const handleDownloadSingle = async (
+    key: 'enhanced_resume' | 'cover_letter' | 'portfolio' | 'personal_note',
+    renderer: 'react-pdf' | 'md-to-pdf' = 'react-pdf',
+  ) => {
     if (!artifacts) return
-    const blob = await postPdf(artifacts, templateId)
+    const blob = await postPdf(artifacts, templateId, key, renderer)
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `resume-${templateId}.pdf`
+    a.download = `${key}-${templateId}.pdf`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -267,18 +281,20 @@ Requirements:
             <Separator id="resume-generator-panel-separator" />
             <Row id="resume-generator-panel-row-2">
               <Field id="resume-generator-panel-field-3">
-                <Label>Target role (optional)</Label>
+                <Label id="resume-generator-panel-label-3">Target role (optional)</Label>
                 <TextArea
+                  id="resume-generator-panel-text-area-3"
                   style={{ minHeight: 40 }}
                   placeholder="e.g., Senior Frontend Engineer"
                   value={targetRole}
                   onChange={(e) => setTargetRole(e.target.value)}
                 />
-                <Label>Tone</Label>
-                <FormControl size="small" fullWidth>
-                  <InputLabel id="tone-multi-label">Select tones</InputLabel>
+                <Label id="resume-generator-panel-label-4">Tone</Label>
+                <FormControl id="resume-generator-panel-form-control-1" size="small" fullWidth>
+                  <InputLabel id="resume-generator-panel-input-label-1">Select tones</InputLabel>
                   <Select
-                    labelId="tone-multi-label"
+                    id="resume-generator-panel-select-1"
+                    labelId="resume-generator-panel-input-label-1"
                     multiple
                     value={toneChoices}
                     onChange={(e) =>
@@ -288,23 +304,36 @@ Requirements:
                           : (e.target.value as string[]),
                       )
                     }
-                    input={<OutlinedInput label="Select tones" />}
+                    input={
+                      <OutlinedInput id="resume-generator-panel-input-1" label="Select tones" />
+                    }
                     renderValue={(selected) => (selected as string[]).join(', ')}
                   >
-                    {TONE_OPTIONS.map((name) => (
-                      <MenuItem key={name} value={name}>
-                        <Checkbox checked={toneChoices.indexOf(name) > -1} />
-                        <ListItemText primary={name} />
+                    {TONE_OPTIONS.map((name, index) => (
+                      <MenuItem
+                        id={`resume-generator-panel-menu-item-${index}`}
+                        key={name}
+                        value={name}
+                      >
+                        <Checkbox
+                          id={`resume-generator-panel-checkbox-${index}`}
+                          checked={toneChoices.indexOf(name) > -1}
+                        />
+                        <ListItemText
+                          id={`resume-generator-panel-list-item-text-${index}`}
+                          primary={name}
+                        />
                       </MenuItem>
                     ))}
                   </Select>
                 </FormControl>
 
-                <Label>Style / Register (optional)</Label>
-                <FormControl size="small" fullWidth>
-                  <InputLabel id="style-multi-label">Select styles</InputLabel>
+                <Label id="resume-generator-panel-label-5">Style / Register (optional)</Label>
+                <FormControl id="resume-generator-panel-form-control-2" size="small" fullWidth>
+                  <InputLabel id="resume-generator-panel-input-label-2">Select styles</InputLabel>
                   <Select
-                    labelId="style-multi-label"
+                    id="resume-generator-panel-select-2"
+                    labelId="resume-generator-panel-input-label-2"
                     multiple
                     value={styleChoices}
                     onChange={(e) =>
@@ -314,13 +343,25 @@ Requirements:
                           : (e.target.value as string[]),
                       )
                     }
-                    input={<OutlinedInput label="Select styles" />}
+                    input={
+                      <OutlinedInput id="resume-generator-panel-input-2" label="Select styles" />
+                    }
                     renderValue={(selected) => (selected as string[]).join(', ')}
                   >
-                    {STYLE_OPTIONS.map((name) => (
-                      <MenuItem key={name} value={name}>
-                        <Checkbox checked={styleChoices.indexOf(name) > -1} />
-                        <ListItemText primary={name} />
+                    {STYLE_OPTIONS.map((name, index) => (
+                      <MenuItem
+                        id={`resume-generator-panel-menu-item-${index}`}
+                        key={name}
+                        value={name}
+                      >
+                        <Checkbox
+                          id={`resume-generator-panel-checkbox-${index}`}
+                          checked={styleChoices.indexOf(name) > -1}
+                        />
+                        <ListItemText
+                          id={`resume-generator-panel-list-item-text-${index}`}
+                          primary={name}
+                        />
                       </MenuItem>
                     ))}
                   </Select>
@@ -335,6 +376,18 @@ Requirements:
                   <option value="sunset">Sunset</option>
                   <option value="slate">Slate</option>
                 </SelectEl>
+                <Label id="resume-generator-panel-label-6">PDF Renderer</Label>
+                <SelectEl
+                  value={renderer}
+                  onChange={(e) =>
+                    setRenderer(
+                      String((e.target as HTMLSelectElement).value) as 'react-pdf' | 'md-to-pdf',
+                    )
+                  }
+                >
+                  <option value="react-pdf">React-PDF (templates)</option>
+                  <option value="md-to-pdf">Markdown (md-to-pdf)</option>
+                </SelectEl>
               </Field>
               <Field id="resume-generator-panel-field-4">
                 <Button
@@ -345,13 +398,36 @@ Requirements:
                 >
                   {loading ? 'Generating…' : 'Generate'}
                 </Button>
-                <Button
-                  id="resume-generator-panel-button-4"
-                  onClick={handleDownloadPdf}
-                  disabled={!artifacts}
-                >
-                  Download PDF
-                </Button>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                  <Button
+                    id="download-resume"
+                    onClick={() => handleDownloadSingle('enhanced_resume', renderer)}
+                    disabled={!artifacts}
+                  >
+                    Download Resume PDF
+                  </Button>
+                  <Button
+                    id="download-cover-letter"
+                    onClick={() => handleDownloadSingle('cover_letter', renderer)}
+                    disabled={!artifacts}
+                  >
+                    Download Cover Letter PDF
+                  </Button>
+                  <Button
+                    id="download-portfolio"
+                    onClick={() => handleDownloadSingle('portfolio', renderer)}
+                    disabled={!artifacts}
+                  >
+                    Download Portfolio PDF
+                  </Button>
+                  <Button
+                    id="download-personal-note"
+                    onClick={() => handleDownloadSingle('personal_note', renderer)}
+                    disabled={!artifacts}
+                  >
+                    Download Personal Note PDF
+                  </Button>
+                </div>
               </Field>
             </Row>
             <Snackbar
@@ -370,20 +446,28 @@ Requirements:
       </BrokenGlass>
 
       {artifacts && (
-        <Row>
-          <Preview>
-            <Typography variant="h6">Resume</Typography>
-            <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{artifacts.enhanced_resume}</pre>
-          </Preview>
-          <Preview>
-            <Typography variant="h6">Cover Letter</Typography>
-            <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{artifacts.cover_letter}</pre>
-          </Preview>
-          <Preview>
-            <Typography variant="h6">Personal Note</Typography>
-            <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{artifacts.personal_note}</pre>
-          </Preview>
-        </Row>
+        <>
+          <Row>
+            <Preview>
+              <Typography variant="h6">Resume</Typography>
+              <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{artifacts.enhanced_resume}</pre>
+            </Preview>
+            <Preview>
+              <Typography variant="h6">Cover Letter</Typography>
+              <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{artifacts.cover_letter}</pre>
+            </Preview>
+          </Row>
+          <Row>
+            <Preview>
+              <Typography variant="h6">Portfolio</Typography>
+              <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{artifacts.portfolio}</pre>
+            </Preview>
+            <Preview>
+              <Typography variant="h6">Personal Note</Typography>
+              <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{artifacts.personal_note}</pre>
+            </Preview>
+          </Row>
+        </>
       )}
     </Root>
   )
