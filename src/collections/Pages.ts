@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { sectionBlocks } from '../blocks/sections'
+import pagesAfterChange from '@/hooks/pages.afterChange'
 
 export const Pages: CollectionConfig = {
   slug: 'pages',
@@ -18,6 +19,7 @@ export const Pages: CollectionConfig = {
       blocks: sectionBlocks,
     },
   ],
+  hooks: { afterChange: [pagesAfterChange] },
 }
 
 export default Pages

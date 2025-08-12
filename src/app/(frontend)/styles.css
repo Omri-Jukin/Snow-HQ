@@ -85,6 +85,15 @@ a {
   }
 }
 
+nav.main-nav {
+  display: flex;
+  gap: 16px;
+}
+
+nav.main-nav a {
+  text-decoration: none;
+}
+
 svg {
   vertical-align: middle;
 }

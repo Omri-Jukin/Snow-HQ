@@ -11,6 +11,8 @@ import { Users } from './collections/Users'
 import { Media } from './collections/Media'
 import Pages from './collections/Pages'
 import Templates from './collections/Templates'
+import Jobs from './collections/Jobs'
+import generateEndpoint from './endpoints/generate'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -22,7 +24,7 @@ export default buildConfig({
       baseDir: path.resolve(dirname),
     },
   },
-  collections: [Users, Media, Pages, Templates],
+  collections: [Users, Media, Pages, Templates, Jobs],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {
@@ -38,4 +40,5 @@ export default buildConfig({
     payloadCloudPlugin(),
     // storage-adapter-placeholder
   ],
+  endpoints: [generateEndpoint],
 })

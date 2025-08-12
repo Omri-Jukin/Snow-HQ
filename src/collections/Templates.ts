@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { sectionBlocks } from '../blocks/sections'
+import templatesAfterChange from '@/hooks/templates.afterChange'
 
 const Templates: CollectionConfig = {
   slug: 'templates',
@@ -43,6 +44,7 @@ const Templates: CollectionConfig = {
       blocks: sectionBlocks,
     },
   ],
+  hooks: { afterChange: [templatesAfterChange] },
 }
 
 export default Templates

@@ -21,10 +21,10 @@ export default async function HomePage() {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Typography variant="h4" sx={{ mb: 2 }}>
+      <Typography component="h1" variant="h4" sx={{ mb: 2 }}>
         {user ? `Welcome back, ${user.email}` : 'Welcome to Snow HQ'}
       </Typography>
-      <Typography sx={{ mb: 2 }}>
+      <Typography sx={{ mb: 2 }} className="links">
         <Link className="admin" href={payloadConfig.routes.admin} target="_blank">
           Go to admin panel
         </Link>
