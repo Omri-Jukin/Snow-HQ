@@ -1,0 +1,3 @@
+[submodule "apps/crm"]
+	path = apps/crm
+	url = https://github.com/Omri-Jukin/Snow
